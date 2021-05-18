@@ -103,17 +103,16 @@ func serve(w http.ResponseWriter, r *http.Request, admit admitv1Func) {
 	}
 }
 
-func serveRunWasm(w http.ResponseWriter, r *http.Request) {
-	serve(w, r, wasmRunner("sum"))
-}
-
 func runCmdWebhook(cmd *cobra.Command, args []string) {
+	validator := newValidator()
+	validator.registerCrd("example/crontab/crd.yaml")
+	validator.registerModule("example/main.wasm")
 	config := Config{
 		CertFile: certFile,
 		KeyFile:  keyFile,
 	}
 
-	http.HandleFunc("/add-label", serveRunWasm)
+	http.HandleFunc("/validate", validator.serveValidate)
 	http.HandleFunc("/readyz", func(w http.ResponseWriter, req *http.Request) { w.Write([]byte("ok")) })
 	server := &http.Server{
 		Addr:      fmt.Sprintf(":%d", port),

@@ -1,0 +1,88 @@
+types:
+  - name: com.example.stable.v1.CronTab
+    map:
+      fields:
+        - name: apiVersion
+          type:
+            scalar: string
+        - name: kind
+          type:
+            scalar: string
+        - name: metadata
+          type:
+            namedType: io.k8s.apimachinery.pkg.apis.meta.v1.ObjectMeta
+        - name: spec
+          type:
+            namedType: com.example.stable.v1.CronTabSpec
+  - name: io.k8s.api.apps.v1.DeploymentSpec
+    map:
+      fields:
+        - name: cronSpec
+          type:
+            scalar: string
+        - name: image
+          type:
+            scalar: string
+        - name: replicas
+          type:
+            scalar: numeric
+  - name: io.k8s.apimachinery.pkg.apis.meta.v1.ObjectMeta
+    map:
+      fields:
+        - name: creationTimestamp
+          type:
+            namedType: io.k8s.apimachinery.pkg.apis.meta.v1.Time
+        - name: managedFields
+          type:
+            list:
+              elementType:
+                namedType: io.k8s.apimachinery.pkg.apis.meta.v1.ManagedFieldsEntry
+              elementRelationship: atomic
+  - name: io.k8s.apimachinery.pkg.apis.meta.v1.ManagedFieldsEntry
+    map:
+      fields:
+        - name: apiVersion
+          type:
+            scalar: string
+        - name: fieldsType
+          type:
+            scalar: string
+        - name: fieldsV1
+          type:
+            namedType: io.k8s.apimachinery.pkg.apis.meta.v1.FieldsV1
+        - name: manager
+          type:
+            scalar: string
+        - name: operation
+          type:
+            scalar: string
+        - name: time
+          type:
+            namedType: io.k8s.apimachinery.pkg.apis.meta.v1.Time
+        - name: subresource
+          type:
+            scalar: string
+  - name: io.k8s.apimachinery.pkg.apis.meta.v1.FieldsV1
+    map:
+      elementType:
+        scalar: untyped
+        list:
+          elementType:
+            namedType: __untyped_atomic_
+          elementRelationship: atomic
+        map:
+          elementType:
+            namedType: __untyped_atomic_
+          elementRelationship: atomic
+  - name: io.k8s.apimachinery.pkg.apis.meta.v1.Time
+    scalar: untyped
+  - name: __untyped_atomic_
+    scalar: untyped
+    list:
+      elementType:
+        namedType: __untyped_atomic_
+      elementRelationship: atomic
+    map:
+      elementType:
+        namedType: __untyped_atomic_
+      elementRelationship: atomic
