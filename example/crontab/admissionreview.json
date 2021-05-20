@@ -22,9 +22,9 @@
       "apiVersion":"stable.example.com/v1",
       "kind":"CronTab",
       "spec": {
-	"cronSpec": "*/5 * * * *",
-	"image": "example.gcr.io/cronjobs/myjob:v0.0.1",
-	"replicas": "6"
+        "cronSpec": "*/5 * * * *",
+        "image": "example.gcr.io/cronjobs/myjob:v0.0.1",
+        "replicas": 6
       }
     },
     "oldObject": {"apiVersion":"stable.example.com/v1","kind":"CronTab"},
