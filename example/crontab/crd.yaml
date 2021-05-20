@@ -18,10 +18,11 @@ spec:
           type: object
           properties:
             spec:
+              format: "cel:field.replicas < 5"
               type: object
               properties:
                 cronSpec:
-                  format: "wasm:example-module:validate_length"
+                  #format: "wasm:example-module:validate_length"
                   type: string
                 image:
                   type: string

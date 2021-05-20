@@ -12,6 +12,8 @@ import (
 	v1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog"
+
+	"github.com/jpbetz/runner-webhook/validators"
 )
 
 var (
@@ -24,8 +26,8 @@ var (
 // CmdWebhook is used by agnhost Cobra.
 var CmdWebhook = &cobra.Command{
 	Use:   "webhook",
-	Short: "Starts an HTTP server that handles MutatingAdmissionWebhook and ValidatingAdmissionWebhook via WebAssembly code",
-	Long:  `Starts an HTTP server that handles MutatingAdmissionWebhook and ValidatingAdmissionWebhook via WebAssembly code`,
+	Short: "Starts a Kubernetes webhook that performs custom validation",
+	Long:  `Starts a Kubernetes webhook that performs custom validation`,
 	Args:  cobra.MaximumNArgs(0),
 	Run:   runCmdWebhook,
 }
@@ -104,21 +106,34 @@ func serve(w http.ResponseWriter, r *http.Request, admit admitv1Func) {
 }
 
 func runCmdWebhook(cmd *cobra.Command, args []string) {
-	validator := newValidator()
-	validator.registerCrd("example/crontab/crd.yaml")
-	validator.registerModule("example/main.wasm")
+	validator := newFormatValidators()
+	err := validator.registerCrd("example/crontab/crd.yaml")
+	if err != nil {
+		panic(err)
+	}
+
+	wasmValidator := validators.NewWasmValidator()
+	err = wasmValidator.RegisterModule("example/main.wasm")
+	if err != nil {
+		panic(err)
+	}
+	validator.registerFormat("wasm", wasmValidator)
+
+	celValidator := validators.NewCelValidator()
+	validator.registerFormat("cel", celValidator)
+
 	config := Config{
 		CertFile: certFile,
 		KeyFile:  keyFile,
 	}
 
-	http.HandleFunc("/validate", validator.serveValidate)
+	http.HandleFunc("/validate", validator.serveValidateRequest)
 	http.HandleFunc("/readyz", func(w http.ResponseWriter, req *http.Request) { w.Write([]byte("ok")) })
 	server := &http.Server{
 		Addr:      fmt.Sprintf(":%d", port),
 		TLSConfig: configTLS(config),
 	}
-	err := server.ListenAndServeTLS("", "")
+	err = server.ListenAndServeTLS("", "")
 	if err != nil {
 		panic(err)
 	}
