@@ -29,18 +29,11 @@ func newFormatValidators() *formatValidators {
 	return v
 }
 
-
-func (v *formatValidators) registerCrd(filepath string) error {
-	crd, err := v.loadCrd(filepath)
-	if err != nil {
-		return err
-	}
+func (v *formatValidators) RegisterCustomResourceDefinition(crd *apiextensionsv1.CustomResourceDefinition) {
 	for _, version := range crd.Spec.Versions {
 		gvk := schema.GroupVersionKind{Group: crd.Spec.Group, Version: version.Name, Kind: crd.Spec.Names.Kind}
 		v.crdSchemas[gvk] = &version
 	}
-
-	return nil
 }
 
 func (v *formatValidators) registerFormat(validatorId string, formatValidator validators.FormatValidator) {

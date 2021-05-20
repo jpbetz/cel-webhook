@@ -18,7 +18,7 @@ spec:
           type: object
           properties:
             spec:
-              format: "cel:field.replicas < 5"
+              format: "cel:field.replicas < field.maxReplicas"
               type: object
               properties:
                 cronSpec:
@@ -27,6 +27,8 @@ spec:
                 image:
                   type: string
                 replicas:
+                  type: integer
+                maxReplicas:
                   type: integer
   # either Namespaced or Cluster
   scope: Namespaced

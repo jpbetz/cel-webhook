@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog"
 
+	"github.com/jpbetz/runner-webhook/informers"
 	"github.com/jpbetz/runner-webhook/validators"
 )
 
@@ -106,8 +107,10 @@ func serve(w http.ResponseWriter, r *http.Request, admit admitv1Func) {
 }
 
 func runCmdWebhook(cmd *cobra.Command, args []string) {
+	stopCh := make(chan struct{})
+	defer close(stopCh)
 	validator := newFormatValidators()
-	err := validator.registerCrd("example/crontab/crd.yaml")
+	err := informers.StartCRDInformer(validator, stopCh)
 	if err != nil {
 		panic(err)
 	}

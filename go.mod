@@ -15,6 +15,7 @@ require (
 	k8s.io/api v0.21.1
 	k8s.io/apiextensions-apiserver v0.21.1
 	k8s.io/apimachinery v0.21.1
+	k8s.io/client-go v0.21.1
 	k8s.io/klog v1.0.0
 	sigs.k8s.io/structured-merge-diff/v4 v4.1.1 // indirect
 )
