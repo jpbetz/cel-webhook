@@ -1,8 +1,7 @@
 TODO:
 
-- [ ] add informer to fetch crds and register them
-- [ ] add details on how to register with apiserver
-- [ ] add end-to-end examples
+- [ ] validate CRD create/update by making sure that all expressions validate against the current schema
+- [ ] compile and register all CEL programs when CRD is created/updated as well
 
 How to run just the webhook:
 

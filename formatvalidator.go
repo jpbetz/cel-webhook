@@ -66,11 +66,12 @@ func (v *formatValidators) validateRequest(ar v1.AdmissionReview) *v1.AdmissionR
 		klog.Error(err)
 		return toV1AdmissionResponse(err)
 	}
-
-	err = v.validateObj(v.crdSchemas[obj.GroupVersionKind()].Schema.OpenAPIV3Schema, obj.Object)
-	if err != nil {
-		klog.Error(err)
-		return toV1AdmissionResponse(err)
+	if crd, ok := v.crdSchemas[obj.GroupVersionKind()]; ok {
+		err = v.validateObj(nil, crd.Schema.OpenAPIV3Schema, obj.Object)
+		if err != nil {
+			klog.Error(err)
+			return toV1AdmissionResponse(err)
+		}
 	}
 
 	reviewResponse := v1.AdmissionResponse{}
@@ -78,7 +79,8 @@ func (v *formatValidators) validateRequest(ar v1.AdmissionReview) *v1.AdmissionR
 	return &reviewResponse
 }
 
-func (v *formatValidators) validateObj(schema *apiextensionsv1.JSONSchemaProps, obj interface{}) error {
+// TODO: traverse everything comprehensively
+func (v *formatValidators) validateObj(fieldpath []string, schema *apiextensionsv1.JSONSchemaProps, obj interface{}) error {
 	klog.V(2).Info("calling validateObj on object")
 	if len(schema.Format) > 0 {
 		parts := strings.SplitN(schema.Format, ":", 2)
@@ -92,17 +94,18 @@ func (v *formatValidators) validateObj(schema *apiextensionsv1.JSONSchemaProps, 
 			return nil // ignore unsupported validators
 		}
 		klog.V(2).Infof("calling %s validator", validatorId)
-		if err := validator.Validate(validatorSpecificContent, obj); err != nil {
+		// TODO: use real fieldpaths, i.e. structured-merge-diff ones
+		if err := validator.Validate(fieldpath, validatorSpecificContent, obj); err != nil {
 			return err
 		}
 	}
 	if len(schema.Properties) > 0 {
 		if m, ok := obj.(map[string]interface{}); ok { // TODO: should return error if not
-			for prop, s := range schema.Properties {
-				klog.V(2).Infof("property: %s", prop)
-				if propObj, ok := m[prop]; ok {
+			for propName, prop := range schema.Properties {
+				klog.V(2).Infof("property: %prop", propName)
+				if propObj, ok := m[propName]; ok {
 					klog.V(2).Infof("property value: %v", propObj)
-					if err := v.validateObj(&s, propObj); err != nil {
+					if err := v.validateObj(append(fieldpath, propName), &prop, propObj); err != nil {
 						return err
 					}
 
