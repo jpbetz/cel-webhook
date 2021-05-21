@@ -65,6 +65,10 @@ func (v *CelValidator) buildDecl(fieldpath []string, schema *apiextensionsv1.JSO
 		for k, prop := range schema.Properties {
 			celDecls = append(celDecls, v.buildDecl(append(fieldpath, k), &prop)...)
 		}
+	case "array":
+		// TODO support properly with type checking
+		fieldName := strings.Join(fieldpath, ".")
+		celDecls = append(celDecls, decls.NewVar(fieldName, decls.NewListType(decls.Dyn)))
 	case "string":
 		fieldName := strings.Join(fieldpath, ".")
 		celDecls = append(celDecls, decls.NewVar(fieldName, decls.String))
@@ -116,6 +120,10 @@ func (v *CelValidator) buildVars(fieldpath []string, obj interface{}, celVars ma
 		for k, value := range objVal {
 			v.buildVars(append(fieldpath, k), value, celVars)
 		}
+	case []interface{}:
+		// TODO: handled in structured way
+		fieldName := strings.Join(fieldpath, ".")
+		celVars[fieldName] = obj
 	default:
 		fieldName := strings.Join(fieldpath, ".")
 		celVars[fieldName] = obj

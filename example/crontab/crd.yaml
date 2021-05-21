@@ -27,12 +27,16 @@ spec:
                 image:
                   type: string
                 replicas:
-                  format: "rule: replicas > 100 "
                   type: integer
                 minReplicas:
                   type: integer
                 maxReplicas:
                   type: integer
+                primes:
+                  type: array
+                  format: "rule: primes.all(i, i < 5)"
+                  items:
+                    type: integer
   # either Namespaced or Cluster
   scope: Namespaced
   names:

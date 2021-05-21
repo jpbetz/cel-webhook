@@ -1,6 +1,12 @@
 TODO:
 
-- [ ] compile and cache all CEL programs when CRD is created/updated
+- [ ] support all valid structural schemas (properties, items, additionalProperties)
+- [ ] support CRD deletion
+- [ ] don't traverse entire object for each validation, instead, use paths to dereference into an object and run compiled validators
+- [ ] try out more validator cases for builtin types (namespace selector, ...)
+- [ ] support multiple validation rules on any data element
+- [ ] Write unit test suite
+- [ ] should there be restrictions on where valuation rules can be set?
 
 How to run just the webhook:
 

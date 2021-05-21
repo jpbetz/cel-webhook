@@ -8,3 +8,6 @@ spec:
   replicas: 4
   minReplicas: 3
   maxReplicas: 5
+  primes:
+    - 1
+    - 10

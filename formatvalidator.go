@@ -123,17 +123,24 @@ func (v *formatValidators) validatePrograms(fieldpath []string, schema *apiexten
 			return err
 		}
 	}
-	if len(schema.Properties) > 0 {
+	if schema.Type == "object" {
 		for propName, prop := range schema.Properties {
 			if err := v.validatePrograms(append(fieldpath, propName), &prop); err != nil {
 				return err
 			}
 		}
 	}
+	if schema.Type == "array" {
+		if schema.Items == nil {
+			return fmt.Errorf("expected items to be non-nil for array type")
+		}
+		if err := v.validatePrograms(append(fieldpath, "item"), schema.Items.Schema); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
-// TODO: traverse everything comprehensively
 func (v *formatValidators) validateObj(fieldpath []string, schema *apiextensionsv1.JSONSchemaProps, obj interface{}) error {
 	if len(schema.Format) > 0 {
 		parts := strings.SplitN(schema.Format, ":", 2)
@@ -151,14 +158,25 @@ func (v *formatValidators) validateObj(fieldpath []string, schema *apiextensions
 			return err
 		}
 	}
-	if len(schema.Properties) > 0 {
+	if schema.Type == "object" {
 		if m, ok := obj.(map[string]interface{}); ok { // TODO: should return error if not
 			for propName, prop := range schema.Properties {
 				if propObj, ok := m[propName]; ok {
 					if err := v.validateObj(append(fieldpath, propName), &prop, propObj); err != nil {
 						return err
 					}
-
+				}
+			}
+		}
+	}
+	if schema.Type == "array" {
+		if schema.Items == nil {
+			return fmt.Errorf("expected items to be non-nil for array type")
+		}
+		if items, ok := obj.([]interface{}); ok { // TODO: should return error if not
+			for _, item := range items {
+				if err := v.validateObj(append(fieldpath, "item"), schema.Items.Schema, item); err != nil {
+					return err
 				}
 			}
 		}
