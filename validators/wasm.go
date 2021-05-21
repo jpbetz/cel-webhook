@@ -6,10 +6,12 @@ import (
 	"strings"
 
 	"github.com/wasmerio/wasmer-go/wasmer"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
 
 type FormatValidator interface {
-	Validate(fieldpath []string, validatorContent string, obj interface{}) error
+	Validate(fieldpath []string, validatorContent string, schema *apiextensionsv1.JSONSchemaProps, obj interface{}) error
+	ValidateProgram(fieldpath []string, validatorContent string, schema *apiextensionsv1.JSONSchemaProps) error
 }
 
 type WasmValidator struct {
@@ -44,7 +46,12 @@ func (v *WasmValidator) RegisterModule(filepath string) error {
 	return nil
 }
 
-func (v *WasmValidator) Validate(fieldpath []string, validatorContent string, obj interface{}) error {
+func (v *WasmValidator) ValidateProgram(fieldpath []string, validatorContent string, schema *apiextensionsv1.JSONSchemaProps) error {
+	// TODO
+	return nil
+}
+
+func (v *WasmValidator) Validate(fieldpath []string, validatorContent string, schema *apiextensionsv1.JSONSchemaProps, obj interface{}) error {
 	parts := strings.Split(validatorContent, ":")
 	if len(parts) != 2 {
 		return fmt.Errorf("expected wasm:<module>:<function-name> but got wasm:%s", validatorContent)

@@ -1,7 +1,6 @@
 TODO:
 
-- [ ] validate CRD create/update by making sure that all expressions validate against the current schema
-- [ ] compile and register all CEL programs when CRD is created/updated as well
+- [ ] compile and cache all CEL programs when CRD is created/updated
 
 How to run just the webhook:
 

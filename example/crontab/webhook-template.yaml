@@ -5,7 +5,7 @@ metadata:
 webhooks:
   - name: "webhook.validator.example.com"
     rules:
-      - apiGroups:   ["stable.example.com"]
+      - apiGroups:   ["*"]
         apiVersions: ["v1"]
         operations:  ["CREATE", "UPDATE"]
         resources:   ["*"]

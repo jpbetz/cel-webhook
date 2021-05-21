@@ -17,6 +17,10 @@ import (
 	"github.com/jpbetz/runner-webhook/validators"
 )
 
+type RegisterAware interface {
+	RegisterCustomResourceDefinition(crd *apiextensionsv1.CustomResourceDefinition)
+}
+
 type formatValidators struct {
 	validators map[string]validators.FormatValidator
 	crdSchemas map[schema.GroupVersionKind]*apiextensionsv1.CustomResourceDefinitionVersion
@@ -33,6 +37,11 @@ func (v *formatValidators) RegisterCustomResourceDefinition(crd *apiextensionsv1
 	for _, version := range crd.Spec.Versions {
 		gvk := schema.GroupVersionKind{Group: crd.Spec.Group, Version: version.Name, Kind: crd.Spec.Names.Kind}
 		v.crdSchemas[gvk] = &version
+	}
+	for _, validator := range v.validators {
+		if r, ok := validator.(RegisterAware); ok {
+			r.RegisterCustomResourceDefinition(crd)
+		}
 	}
 }
 
@@ -58,7 +67,24 @@ func (v *formatValidators) serveValidateRequest(w http.ResponseWriter, r *http.R
 }
 
 func (v *formatValidators) validateRequest(ar v1.AdmissionReview) *v1.AdmissionResponse {
-	klog.V(2).Info("calling run WebAssembly webhook")
+	if ar.Request.Kind.String() == apiextensionsv1.SchemeGroupVersion.WithKind("CustomResourceDefinition").String() {
+		crd := apiextensionsv1.CustomResourceDefinition{}
+		raw := ar.Request.Object.Raw
+		err := json.Unmarshal(raw, &crd)
+		if err != nil {
+			klog.Error(err)
+			return toV1AdmissionResponse(err)
+		}
+		for _, version := range crd.Spec.Versions {
+			err = v.validatePrograms(nil, version.Schema.OpenAPIV3Schema)
+			if err != nil {
+				klog.Error(err)
+				return toV1AdmissionResponse(err)
+			}
+		}
+	}
+
+
 	obj := unstructured.Unstructured{Object: map[string]interface{}{}}
 	raw := ar.Request.Object.Raw
 	err := json.Unmarshal(raw, &obj)
@@ -66,6 +92,7 @@ func (v *formatValidators) validateRequest(ar v1.AdmissionReview) *v1.AdmissionR
 		klog.Error(err)
 		return toV1AdmissionResponse(err)
 	}
+
 	if crd, ok := v.crdSchemas[obj.GroupVersionKind()]; ok {
 		err = v.validateObj(nil, crd.Schema.OpenAPIV3Schema, obj.Object)
 		if err != nil {
@@ -79,9 +106,7 @@ func (v *formatValidators) validateRequest(ar v1.AdmissionReview) *v1.AdmissionR
 	return &reviewResponse
 }
 
-// TODO: traverse everything comprehensively
-func (v *formatValidators) validateObj(fieldpath []string, schema *apiextensionsv1.JSONSchemaProps, obj interface{}) error {
-	klog.V(2).Info("calling validateObj on object")
+func (v *formatValidators) validatePrograms(fieldpath []string, schema *apiextensionsv1.JSONSchemaProps) error {
 	if len(schema.Format) > 0 {
 		parts := strings.SplitN(schema.Format, ":", 2)
 		if len(parts) < 2 {
@@ -93,18 +118,43 @@ func (v *formatValidators) validateObj(fieldpath []string, schema *apiextensions
 		if !ok {
 			return nil // ignore unsupported validators
 		}
-		klog.V(2).Infof("calling %s validator", validatorId)
 		// TODO: use real fieldpaths, i.e. structured-merge-diff ones
-		if err := validator.Validate(fieldpath, validatorSpecificContent, obj); err != nil {
+		if err := validator.ValidateProgram(fieldpath, validatorSpecificContent, schema); err != nil {
+			return err
+		}
+	}
+	if len(schema.Properties) > 0 {
+		for propName, prop := range schema.Properties {
+			if err := v.validatePrograms(append(fieldpath, propName), &prop); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// TODO: traverse everything comprehensively
+func (v *formatValidators) validateObj(fieldpath []string, schema *apiextensionsv1.JSONSchemaProps, obj interface{}) error {
+	if len(schema.Format) > 0 {
+		parts := strings.SplitN(schema.Format, ":", 2)
+		if len(parts) < 2 {
+			return fmt.Errorf("expected format of the form <FormatValidator-id>:<FormatValidator-specific-content>, but got %s", schema.Format)
+		}
+		validatorId := parts[0]
+		validatorSpecificContent := parts[1]
+		validator, ok := v.validators[validatorId]
+		if !ok {
+			return nil // ignore unsupported validators
+		}
+		// TODO: use real fieldpaths, i.e. structured-merge-diff ones
+		if err := validator.Validate(fieldpath, validatorSpecificContent, schema, obj); err != nil {
 			return err
 		}
 	}
 	if len(schema.Properties) > 0 {
 		if m, ok := obj.(map[string]interface{}); ok { // TODO: should return error if not
 			for propName, prop := range schema.Properties {
-				klog.V(2).Infof("property: %prop", propName)
 				if propObj, ok := m[propName]; ok {
-					klog.V(2).Infof("property value: %v", propObj)
 					if err := v.validateObj(append(fieldpath, propName), &prop, propObj); err != nil {
 						return err
 					}

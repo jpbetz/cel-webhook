@@ -18,7 +18,7 @@ spec:
           type: object
           properties:
             spec:
-              format: "cel: minReplicas <= replicas && replicas <= maxReplicas"
+              format: "rule: spec.minReplicas <= spec.replicas && spec.replicas <= spec.maxReplicas"
               type: object
               properties:
                 cronSpec:
@@ -27,7 +27,7 @@ spec:
                 image:
                   type: string
                 replicas:
-                  format: "cel: replicas > 100 "
+                  format: "rule: replicas > 100 "
                   type: integer
                 minReplicas:
                   type: integer

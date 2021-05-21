@@ -21,7 +21,6 @@ var (
 	certFile     string
 	keyFile      string
 	port         int
-	sidecarImage string
 )
 
 // CmdWebhook is used by agnhost Cobra.
@@ -62,7 +61,7 @@ func serve(w http.ResponseWriter, r *http.Request, admit admitv1Func) {
 		return
 	}
 
-	klog.V(2).Info(fmt.Sprintf("handling request: %s", body))
+	//klog.V(2).Info(fmt.Sprintf("handling request: %s", body))
 
 	deserializer := codecs.UniversalDeserializer()
 	obj, gvk, err := deserializer.Decode(body, nil, nil)
@@ -93,7 +92,6 @@ func serve(w http.ResponseWriter, r *http.Request, admit admitv1Func) {
 		return
 	}
 
-	klog.V(2).Info(fmt.Sprintf("sending response: %v", responseObj))
 	respBytes, err := json.Marshal(responseObj)
 	if err != nil {
 		klog.Error(err)
@@ -123,7 +121,7 @@ func runCmdWebhook(cmd *cobra.Command, args []string) {
 	validator.registerFormat("wasm", wasmValidator)
 
 	celValidator := validators.NewCelValidator()
-	validator.registerFormat("cel", celValidator)
+	validator.registerFormat("rule", celValidator)
 
 	config := Config{
 		CertFile: certFile,
@@ -152,5 +150,8 @@ func main() {
 	loggingFlags := &flag.FlagSet{}
 	klog.InitFlags(loggingFlags)
 	rootCmd.PersistentFlags().AddGoFlagSet(loggingFlags)
-	rootCmd.Execute()
+	err := rootCmd.Execute()
+	if err != nil {
+		panic(err)
+	}
 }

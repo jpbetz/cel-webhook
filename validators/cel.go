@@ -2,99 +2,122 @@ package validators
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/checker/decls"
-	"github.com/google/cel-go/common/types"
 	celext "github.com/google/cel-go/ext"
 	expr "google.golang.org/genproto/googleapis/api/expr/v1alpha1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
 
-// https://github.com/tektoncd/triggers/blob/7c165fc7f5f54d6925672ff5061957b5e224135d/pkg/interceptors/cel/cel.go#L71
 type CelValidator struct {
-	//crdPrograms map[schema.GroupVersionKind]*gvkCelInfo
+	compiledPrograms map[string]cel.Program
 }
-
-//type gvkCelInfo struct {
-//	rootType *expr.Type
-//}
 
 func NewCelValidator() *CelValidator {
 	v := &CelValidator{}
-	//v.crdPrograms = map[schema.GroupVersionKind]*gvkCelInfo{}
+	v.compiledPrograms = map[string]cel.Program{}
 	return v
 }
 
-//func (v *CelValidator) RegisterCustomResourceDefinition(crd *apiextensionsv1.CustomResourceDefinition) {
-//	for _, version :=range crd.Spec.Versions {
-//		gvk := schema.GroupVersionKind{Group: crd.Spec.Group, Version: version.Name, Kind: crd.Spec.Names.Kind}
-//		v.crdPrograms[gvk] = &gvkCelInfo{
-//
-//		}
-//	}
-//}
-
-func (v *CelValidator) Validate(fieldpath []string, celCode string, obj interface{}) error {
-	var celDecls []*expr.Decl
-	celVars := map[string]interface{}{}
-	switch o := obj.(type) {
-	case map[string]interface{}:
-		for k, v := range o {
-			// TODO: recursively traverse instead of nesting this 1 level deep
-			// TODO: fully declare types instead of using Dyn
-			// TODO: support all types
-			switch vt := v.(type) {
-			case string:
-				celDecls = append(celDecls, decls.NewVar(k, decls.String))
-				celVars[k] = vt
-			case int32, int64:
-				celDecls = append(celDecls, decls.NewVar(k, decls.Int))
-				celVars[k] = vt
-			case map[string]interface{}:
-				celDecls = append(celDecls, decls.NewVar(k, decls.NewMapType(decls.String, decls.Dyn)))
-				celVars[k] = types.NewDynamicMap(types.DefaultTypeAdapter, v)
-			}
-		}
-	case string:
-		fieldName := fieldpath[len(fieldpath)-1]
-		celDecls = append(celDecls, decls.NewVar(fieldName, decls.String))
-		celVars[fieldName] = o
-	case int32, int64:
-		fieldName := fieldpath[len(fieldpath)-1]
-		celDecls = append(celDecls, decls.NewVar(fieldName, decls.Int))
-		celVars[fieldName] = o
-	default:
-		// TODO: pass in the actual field name as the root var?
+func (v *CelValidator) compileProgram(fieldpath []string, celSource string, schema *apiextensionsv1.JSONSchemaProps) (cel.Program, error) {
+	programPath := "/" + strings.Join(fieldpath, "/")
+	if program, ok := v.compiledPrograms[programPath]; ok {
+		return program, nil
 	}
 
+	var root string
+	if len(fieldpath) > 0 {
+		root = fieldpath[len(fieldpath)-1]
+	}  else {
+		root = "object"
+	}
+	celDecls := v.buildDecl([]string{root}, schema)
 	env, err := cel.NewEnv(
 		celext.Strings(),
 		celext.Encoders(),
 		cel.Declarations(celDecls...))
 	if err != nil {
-		return fmt.Errorf("error initializing CEL environment: %w", err)
+		return nil, fmt.Errorf("error initializing CEL environment: %w", err)
 	}
-	ast, issues := env.Compile(celCode)
+	ast, issues := env.Compile(celSource)
 	if issues != nil && issues.Err() != nil {
-		return fmt.Errorf("CEL compile error: %w", issues.Err())
+		return nil, fmt.Errorf("validation rule compile error: %w", issues.Err())
 	}
 	ast, issues = env.Check(ast)
 	if issues != nil && issues.Err() != nil {
-		return fmt.Errorf("CEL type-check error: %w", issues.Err())
+		return nil, fmt.Errorf("CEL type-check error: %w", issues.Err())
 	}
 	// TODO: this program is cachable and absolutely should be cached
 	prg, err := env.Program(ast)
 	if err != nil {
-		return fmt.Errorf("CEL program construction error: %w", err)
+		return nil, fmt.Errorf("CEL program construction error: %w", err)
 	}
+	v.compiledPrograms[programPath] = prg
+	return prg, nil
+}
 
+func (v *CelValidator) buildDecl(fieldpath []string, schema *apiextensionsv1.JSONSchemaProps) []*expr.Decl {
+	var celDecls []*expr.Decl
+	switch schema.Type {
+	case "object":
+		for k, prop := range schema.Properties {
+			celDecls = append(celDecls, v.buildDecl(append(fieldpath, k), &prop)...)
+		}
+	case "string":
+		fieldName := strings.Join(fieldpath, ".")
+		celDecls = append(celDecls, decls.NewVar(fieldName, decls.String))
+	case "integer":
+		fieldName := strings.Join(fieldpath, ".")
+		celDecls = append(celDecls, decls.NewVar(fieldName, decls.Int))
+	case "number":
+		fieldName := strings.Join(fieldpath, ".")
+		celDecls = append(celDecls, decls.NewVar(fieldName, decls.Double))
+	case "boolean":
+		fieldName := strings.Join(fieldpath, ".")
+		celDecls = append(celDecls, decls.NewVar(fieldName, decls.Bool))
+	default:
+		// TODO: handle as error
+	}
+	return celDecls
+}
+
+func (v *CelValidator) ValidateProgram(fieldpath []string, validatorContent string, schema *apiextensionsv1.JSONSchemaProps) error {
+	_, err := v.compileProgram(fieldpath, validatorContent, schema)
+	return err
+}
+
+func (v *CelValidator) Validate(fieldpath []string, celSource string, schema *apiextensionsv1.JSONSchemaProps, obj interface{}) error {
+	prg, err := v.compileProgram(fieldpath, celSource, schema)
+
+	var root string
+	if len(fieldpath) > 0 {
+		root = fieldpath[len(fieldpath)-1]
+	}  else {
+		root = "object"
+	}
+	celVars := map[string]interface{}{}
+	v.buildVars([]string{root}, obj, celVars)
 	out, _, err := prg.Eval(celVars)
 	if err != nil {
-		return fmt.Errorf("CEL program evaluation error: %w for: %#+v, cel: %s", err, obj, celCode)
+		return fmt.Errorf("validation rule evaluation error: %w for: %#+v, rule: %s", err, obj, celSource)
 	}
 	if out.Value()  != true {
 		// TODO: Will need much better error reporting here
-		return fmt.Errorf("CEL format expression evaluated to false: %s", celCode)
+		return fmt.Errorf("validation failed for: %s", celSource)
 	}
 	return nil
+}
+
+func (v *CelValidator) buildVars(fieldpath []string, obj interface{}, celVars map[string]interface{}) {
+	switch objVal := obj.(type) {
+	case map[string]interface{}:
+		for k, value := range objVal {
+			v.buildVars(append(fieldpath, k), value, celVars)
+		}
+	default:
+		fieldName := strings.Join(fieldpath, ".")
+		celVars[fieldName] = obj
+	}
 }
