@@ -23,8 +23,10 @@ spec:
               properties:
                 cronSpec:
                   #format: "wasm:example-module:validate_length"
+                  #format: "rule: size(cronSpec.split(' ')) >= 5 && cronSpec.split(' ').all(field, field == '*' || field.startsWith('*/') || )"
                   type: string
                 image:
+                  # https://github.com/distribution/distribution/blob/v2.7.1/reference/reference.go
                   type: string
                 replicas:
                   type: integer
@@ -32,9 +34,9 @@ spec:
                   type: integer
                 maxReplicas:
                   type: integer
-                primes:
+                favoriteNumbers:
                   type: array
-                  format: "rule: primes.all(i, i < 5)"
+                  format: "rule: favoriteNumbers.all(i, i < 5)"
                   items:
                     type: integer
   # either Namespaced or Cluster
