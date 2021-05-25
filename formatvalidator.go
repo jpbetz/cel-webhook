@@ -10,7 +10,10 @@ import (
 	"github.com/ghodss/yaml"
 	v1 "k8s.io/api/admission/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/klog"
 
@@ -63,7 +66,87 @@ func (v *formatValidators) loadCrd(crdfilepath string) (*apiextensionsv1.CustomR
 }
 
 func (v *formatValidators) serveValidateRequest(w http.ResponseWriter, r *http.Request) {
-	serve(w, r, v.validateRequest)
+	serve(w, r, v.validateRequest, v.convertRequest)
+}
+
+func (v *formatValidators) convertRequest(convertRequest extensionsv1.ConversionReview) *extensionsv1.ConversionResponse {
+	var convertedObjects []runtime.RawExtension
+	for _, obj := range convertRequest.Objects {
+		cr := unstructured.Unstructured{}
+		if err := cr.UnmarshalJSON(obj.Raw); err != nil {
+			klog.Error(err)
+			return conversionResponseFailureWithMessagef("failed to unmarshall object (%v) with error: %v", string(obj.Raw), err)
+		}
+		if crd, ok := v.crdSchemas[cr.GroupVersionKind()]; ok {
+			convertedCR, err := v.convertDeclaratively(cr.Object, crd.Schema.OpenAPIV3Schema, convertRequest.DesiredAPIVersion)
+			if err != nil {
+				klog.Error(status.String())
+				return &v1beta1.ConversionResponse{
+					Result: metav1.Status{Status: metav1.StatusInternalServerError}, // TODO: distinguish between client and server errors
+				}
+			}
+		}
+		convertedCR.SetAPIVersion(convertRequest.DesiredAPIVersion)
+		out, ok := convertedCR.(map[string]interface{})
+		if !ok {
+			return &v1beta1.ConversionResponse{
+				Result: metav1.Status{Status: metav1.StatusInternalServerError}, // TODO: distinguish between client and server errors
+			}
+		}
+		convertedObjects = append(convertedObjects, runtime.RawExtension{Object: unstructured.Unstructured{Object: out}})
+	}
+	return &v1beta1.ConversionResponse{
+		ConvertedObjects: convertedObjects,
+		Result: metav1.Status{
+			Status: metav1.StatusSuccess,
+		},
+	}
+}
+
+// TODO: will probably need to walk both the old and new schemas
+// to support mapping rules like: from(v1): new.newfieldname := old.oldfieldname
+func (v *formatValidators) convertDeclaratively(fieldpath []string, obj interface{}, schema *apiextensionsv1.JSONSchemaProps, toVersion string) (interface{}, error) {
+	if len(schema.Format) > 0 {
+		parts := strings.SplitN(schema.Format, ":", 2)
+		if len(parts) < 2 {
+			return fmt.Errorf("expected format of the form <id>:<content>, but got %s", schema.Format)
+		}
+		id := parts[0]
+		celSource := parts[1]
+		if id == "convert" {
+			prg, err := v.compileProgram(fieldpath, celSource, schema)
+			var root string
+			if len(fieldpath) > 0 {
+				root = fieldpath[len(fieldpath)-1]
+			} else {
+				root = "object"
+			}
+			celVars := map[string]interface{}{root: obj}
+			out, _, err := prog.Eval(celVars)
+			// TODO: still need to do automatic conversion of things not manually converted
+			if err != nil {
+				return fmt.Errorf("validation rule evaluation error: %w for: %#+v, rule: %s", err, obj, celSource)
+			}
+			return out.Value()
+		}
+	}
+	if len(schema.Properties) > 0 {
+		if in, ok := obj.(map[string]interface{}); ok {
+			mout := map[string]interface{}{}
+			// TODO: walk both schema here
+			// TODO: only automatically convert things to the new schema when type and fieldname match
+			for propName, prop := range schema.Properties {
+				if v, ok := in[propName]; ok {
+					if out, err := v.convertDeclaratively(append(fieldpath, propName), &prop); err != nil {
+						return err
+					}
+					mout[propName] = out
+				}
+			}
+			return mout
+		}
+	}
+	return obj
 }
 
 func (v *formatValidators) validateRequest(ar v1.AdmissionReview) *v1.AdmissionResponse {
@@ -83,7 +166,6 @@ func (v *formatValidators) validateRequest(ar v1.AdmissionReview) *v1.AdmissionR
 			}
 		}
 	}
-
 
 	obj := unstructured.Unstructured{Object: map[string]interface{}{}}
 	raw := ar.Request.Object.Raw
@@ -114,13 +196,10 @@ func (v *formatValidators) validatePrograms(fieldpath []string, schema *apiexten
 		}
 		validatorId := parts[0]
 		validatorSpecificContent := parts[1]
-		validator, ok := v.validators[validatorId]
-		if !ok {
-			return nil // ignore unsupported validators
-		}
-		// TODO: use real fieldpaths, i.e. structured-merge-diff ones
-		if err := validator.ValidateProgram(fieldpath, validatorSpecificContent, schema); err != nil {
-			return err
+		if validator, ok := v.validators[validatorId]; ok {
+			if err := validator.ValidateProgram(fieldpath, validatorSpecificContent, schema); err != nil {
+				return err
+			}
 		}
 	}
 	if schema.Type == "object" {

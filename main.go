@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	v1 "k8s.io/api/admission/v1"
+	extensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog"
 
@@ -18,9 +19,9 @@ import (
 )
 
 var (
-	certFile     string
-	keyFile      string
-	port         int
+	certFile string
+	keyFile  string
+	port     int
 )
 
 // CmdWebhook is used by agnhost Cobra.
@@ -44,9 +45,11 @@ func init() {
 // admitv1beta1Func handles a v1 admission
 type admitv1Func func(v1.AdmissionReview) *v1.AdmissionResponse
 
+type convertv1Func func(extensionsv1.ConversionReview) *extensionsv1.ConversionResponse
+
 // serve handles the http portion of a request prior to handing to an admit
 // function
-func serve(w http.ResponseWriter, r *http.Request, admit admitv1Func) {
+func serve(w http.ResponseWriter, r *http.Request, admit admitv1Func, convert convertv1Func) {
 	var body []byte
 	if r.Body != nil {
 		if data, err := ioutil.ReadAll(r.Body); err == nil {
@@ -85,6 +88,17 @@ func serve(w http.ResponseWriter, r *http.Request, admit admitv1Func) {
 		responseAdmissionReview.Response = admit(*requestedAdmissionReview)
 		responseAdmissionReview.Response.UID = requestedAdmissionReview.Request.UID
 		responseObj = responseAdmissionReview
+	case extensionsv1.SchemeGroupVersion.WithKind("ConversionReview"):
+		requestedConversionReview, ok := obj.(*v1.ConversionReview)
+		if !ok {
+			klog.Errorf("Expected v1.ConversionReview but got: %T", obj)
+			return
+		}
+		responseConversionReview := &extensionsv1.ConversionReview{}
+		responseConversionReview.SetGroupVersionKind(*gvk)
+		responseConversionReview.Response = convert(*requestedConversionReview)
+		responseConversionReview.Response.UID = requestedConversionReview.Request.UID
+		responseObj = responseConversionReview
 	default:
 		msg := fmt.Sprintf("Unsupported group version kind: %v", gvk)
 		klog.Error(msg)
