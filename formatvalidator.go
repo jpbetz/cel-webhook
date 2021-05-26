@@ -16,7 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/klog"
 
-	"github.com/jpbetz/runner-webhook/validators"
+	"github.com/jpbetz/omni-webhook/validators"
 )
 
 type RegisterAware interface {
@@ -90,7 +90,7 @@ func (v *formatValidators) convertRequest(convertRequest apiextensionsv1.Convers
 		if targetCrd, ok := v.crdSchemas[targetGVK]; ok {
 			if currentCrd, ok := v.crdSchemas[currentGVK]; ok {
 				klog.Infof("converting from %v to %v (%s to %s)", currentGVK, targetGVK, currentCrd.Name, targetCrd.Name)
-				converted, err := v.convertObj(nil, currentCrd.Schema.OpenAPIV3Schema, targetCrd.Schema.OpenAPIV3Schema, cr.Object)
+				converted, err := v.convertObj(nil, currentGVK.Version, targetGVK.Version, currentCrd.Schema.OpenAPIV3Schema, targetCrd.Schema.OpenAPIV3Schema, cr.Object)
 				if err != nil {
 					return &apiextensionsv1.ConversionResponse{
 						Result: metav1.Status{Status: metav1.StatusFailure, Message: err.Error()}, // TODO: distinguish between client and server errors
@@ -136,7 +136,6 @@ func (v *formatValidators) convertRequest(convertRequest apiextensionsv1.Convers
 		},
 	}
 }
-
 
 func (v *formatValidators) validateRequest(ar v1.AdmissionReview) *v1.AdmissionResponse {
 	if ar.Request.Kind.String() == apiextensionsv1.SchemeGroupVersion.WithKind("CustomResourceDefinition").String() {
@@ -252,18 +251,24 @@ func (v *formatValidators) validateObj(fieldpath []string, schema *apiextensions
 	return nil
 }
 
-func (v *formatValidators) convertObj(fieldpath []string, currentSchema, targetSchema *apiextensionsv1.JSONSchemaProps, obj interface{}) (interface{}, error) {
+func (v *formatValidators) convertObj(fieldpath []string, currentVersion, targetVersion string, currentSchema, targetSchema *apiextensionsv1.JSONSchemaProps, obj interface{}) (interface{}, error) {
 	klog.Infof("Conversion requested for path %v, format: %s", fieldpath, targetSchema.Format)
 	if len(targetSchema.Format) > 0 {
-		parts := strings.SplitN(targetSchema.Format, ":", 2)
+		parts := strings.SplitN(targetSchema.Format, ":", 3)
 		if len(parts) < 2 {
-			return nil, fmt.Errorf("expected format of the form <id>:<content>, but got %s", targetSchema.Format)
+			return nil, fmt.Errorf("expected format of the form <id>:from=v1:<content>, but got %s", targetSchema.Format)
 		}
 		id := parts[0]
-		code := parts[1]
-		converter, ok := v.converters[id]
-		if ok {
-			return converter.Convert(fieldpath, code, currentSchema, targetSchema, obj)
+		if !strings.HasPrefix(parts[1], "from=") {
+			return nil, fmt.Errorf("expected format of the form <id>:from=v1:<content>, but got %s", targetSchema.Format)
+		}
+		from := strings.TrimPrefix(parts[1], "from=")
+		if from == currentVersion {
+			code := parts[2]
+			converter, ok := v.converters[id]
+			if ok {
+				return converter.Convert(fieldpath, code, currentVersion, targetVersion, currentSchema, targetSchema, obj)
+			}
 		}
 	}
 	if len(targetSchema.Properties) > 0 {
@@ -274,7 +279,7 @@ func (v *formatValidators) convertObj(fieldpath []string, currentSchema, targetS
 			for propName, prop := range targetSchema.Properties {
 				currentProp := currentSchema.Properties[propName]
 				if value, ok := in[propName]; ok {
-					out, err := v.convertObj(append(fieldpath, propName), &currentProp, &prop, value)
+					out, err := v.convertObj(append(fieldpath, propName), currentVersion, targetVersion, &currentProp, &prop, value)
 					if err != nil {
 						return nil, err
 					}

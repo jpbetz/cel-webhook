@@ -143,7 +143,7 @@ func (v *CelValidator) buildVars(fieldpath []string, obj interface{}, celVars ma
 
 // TODO: will probably need to walk both the old and new schemas
 // to support mapping rules like: from(v1): new.newfieldname := old.oldfieldname
-func (v *CelValidator) Convert(fieldpath []string, celSource string, currentSchema, targetSchema *apiextensionsv1.JSONSchemaProps, obj interface{}) (interface{}, error) {
+func (v *CelValidator) Convert(fieldpath []string, celSource string, currentVersion, targetVersion string, currentSchema, targetSchema *apiextensionsv1.JSONSchemaProps, obj interface{}) (interface{}, error) {
 	klog.Infof("Running converter: %s on %v", celSource, fieldpath)
 	prg, err := v.compileProgram(fieldpath, celSource, currentSchema) // Schema is expected to be the old schema (for now)
 	if err != nil {

@@ -1,4 +1,4 @@
-module github.com/jpbetz/runner-webhook
+module github.com/jpbetz/omni-webhook
 
 go 1.16
 

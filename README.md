@@ -26,7 +26,7 @@ How to run just the webhook:
 
 example/crontab/wasm/setup-webhook.sh
 
-go build . && ./runner-webhook webhook \
+go build . && ./omni-webhook webhook \
   --tls-cert-file example/crontab/webhook.crt \
   --tls-private-key-file example/crontab/webhook.key \
   --port 8084 \
@@ -43,14 +43,14 @@ example/crontab/wasm/setup-webhook.sh
 $ cd kubernetes
 hack/local-up-cluster.sh
 
-$ cd runner-webhook
+$ cd omni-webhook
 export KUBECONFIG=/var/run/kubernetes/admin.kubeconfig
-go build . && ./runner-webhook webhook \
+go build . && ./omni-webhook webhook \
   --tls-cert-file example/crontab/webhook.crt \
   --tls-private-key-file example/crontab/webhook.key \
   --port 8084 \
   -v 4
   
-$ cd runner-webhook
+$ cd omni-webhook
 kubectl apply --server-side -f example/crontab/crd.yaml
 kubectl apply --server-side -f example/crontab/webhook.yaml
