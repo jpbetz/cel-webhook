@@ -34,11 +34,38 @@ spec:
                   type: integer
                 maxReplicas:
                   type: integer
-                favoriteNumbers:
-                  type: array
-                  format: "rule: favoriteNumbers.all(i, i < 5)"
-                  items:
-                    type: integer
+    - name: v2
+      # Each version can be enabled/disabled by Served flag.
+      served: true
+      # One and only one version must be marked as the storage version.
+      storage: false
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              format: "conversion: {'image2': spec.image}"
+              properties:
+                cronSpec:
+                  #format: "wasm:example-module:validate_length"
+                  type: string
+                image2:
+                  type: string
+                replicas:
+                  format: "rule: replicas > 100 "
+                  type: integer
+                minReplicas:
+                  type: integer
+                maxReplicas:
+                  type: integer
+  conversion:
+    strategy: Webhook
+    webhook:
+      conversionReviewVersions: ["v1","v2"]
+      clientConfig:
+        caBundle: CA_BUNDLE
+        url: "https://localhost:8084/validate"
   # either Namespaced or Cluster
   scope: Namespaced
   names:
@@ -50,4 +77,4 @@ spec:
     kind: CronTab
     # shortNames allow shorter string to match your resource on the CLI
     shortNames:
-    - ct
+      - ct

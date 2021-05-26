@@ -14,6 +14,10 @@ type FormatValidator interface {
 	ValidateProgram(fieldpath []string, validatorContent string, schema *apiextensionsv1.JSONSchemaProps) error
 }
 
+type Converter interface {
+	Convert(fieldpath []string, validatorContent string, currentVersion, targetVersion string, currentSchema, targetSchema *apiextensionsv1.JSONSchemaProps, obj interface{}) (interface{}, error)
+}
+
 type WasmValidator struct {
 	// TODO: Should probably not leave modules running?
 	moduleInstances map[string]*wasmer.Instance
