@@ -13,7 +13,6 @@ openssl req -x509 -newkey rsa:4096 -keyout webhook.key -out webhook.crt -days 36
     -extensions SAN
 popd > /dev/null
 
-templateFileName="${scriptDir}/webhook-template.yaml"
-resourceFileName="${scriptDir}/webhook.yaml"
 caBundle=$(base64 "${scriptDir}/webhook.crt" | awk 'BEGIN{ORS="";} {print}')
-sed "s/CA_BUNDLE/${caBundle}/" "${templateFileName}" > "${resourceFileName}"
+sed "s/CA_BUNDLE/${caBundle}/" "${scriptDir}/webhook-template.yaml" > "${scriptDir}/webhook.yaml"
+sed "s/CA_BUNDLE/${caBundle}/" "${scriptDir}/crd-template.yaml" > "${scriptDir}/crd.yaml"

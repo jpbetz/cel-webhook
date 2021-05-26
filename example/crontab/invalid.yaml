@@ -8,6 +8,3 @@ spec:
   replicas: 4
   minReplicas: 3
   maxReplicas: 5
-  favoriteNumbers:
-    - 1
-    - 3

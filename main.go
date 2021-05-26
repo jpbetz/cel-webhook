@@ -89,7 +89,7 @@ func serve(w http.ResponseWriter, r *http.Request, admit admitv1Func, convert co
 		responseAdmissionReview.Response.UID = requestedAdmissionReview.Request.UID
 		responseObj = responseAdmissionReview
 	case extensionsv1.SchemeGroupVersion.WithKind("ConversionReview"):
-		requestedConversionReview, ok := obj.(*v1.ConversionReview)
+		requestedConversionReview, ok := obj.(*extensionsv1.ConversionReview)
 		if !ok {
 			klog.Errorf("Expected v1.ConversionReview but got: %T", obj)
 			return
@@ -136,6 +136,7 @@ func runCmdWebhook(cmd *cobra.Command, args []string) {
 
 	celValidator := validators.NewCelValidator()
 	validator.registerFormat("rule", celValidator)
+	validator.registerConverter("conversion", celValidator)
 
 	config := Config{
 		CertFile: certFile,

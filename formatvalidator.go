@@ -10,7 +10,6 @@ import (
 	"github.com/ghodss/yaml"
 	v1 "k8s.io/api/admission/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -26,12 +25,14 @@ type RegisterAware interface {
 
 type formatValidators struct {
 	validators map[string]validators.FormatValidator
+	converters map[string]validators.Converter
 	crdSchemas map[schema.GroupVersionKind]*apiextensionsv1.CustomResourceDefinitionVersion
 }
 
 func newFormatValidators() *formatValidators {
 	v := &formatValidators{}
 	v.validators = map[string]validators.FormatValidator{}
+	v.converters = map[string]validators.Converter{}
 	v.crdSchemas = map[schema.GroupVersionKind]*apiextensionsv1.CustomResourceDefinitionVersion{}
 	return v
 }
@@ -39,7 +40,8 @@ func newFormatValidators() *formatValidators {
 func (v *formatValidators) RegisterCustomResourceDefinition(crd *apiextensionsv1.CustomResourceDefinition) {
 	for _, version := range crd.Spec.Versions {
 		gvk := schema.GroupVersionKind{Group: crd.Spec.Group, Version: version.Name, Kind: crd.Spec.Names.Kind}
-		v.crdSchemas[gvk] = &version
+		cp := version
+		v.crdSchemas[gvk] = &cp
 	}
 	for _, validator := range v.validators {
 		if r, ok := validator.(RegisterAware); ok {
@@ -50,6 +52,10 @@ func (v *formatValidators) RegisterCustomResourceDefinition(crd *apiextensionsv1
 
 func (v *formatValidators) registerFormat(validatorId string, formatValidator validators.FormatValidator) {
 	v.validators[validatorId] = formatValidator
+}
+
+func (v *formatValidators) registerConverter(converterId string, converter validators.Converter) {
+	v.converters[converterId] = converter
 }
 
 func (v *formatValidators) loadCrd(crdfilepath string) (*apiextensionsv1.CustomResourceDefinition, error) {
@@ -69,33 +75,61 @@ func (v *formatValidators) serveValidateRequest(w http.ResponseWriter, r *http.R
 	serve(w, r, v.validateRequest, v.convertRequest)
 }
 
-func (v *formatValidators) convertRequest(convertRequest extensionsv1.ConversionReview) *extensionsv1.ConversionResponse {
+func (v *formatValidators) convertRequest(convertRequest apiextensionsv1.ConversionReview) *apiextensionsv1.ConversionResponse {
 	var convertedObjects []runtime.RawExtension
-	for _, obj := range convertRequest.Objects {
+	for _, obj := range convertRequest.Request.Objects {
 		cr := unstructured.Unstructured{}
 		if err := cr.UnmarshalJSON(obj.Raw); err != nil {
-			klog.Error(err)
-			return conversionResponseFailureWithMessagef("failed to unmarshall object (%v) with error: %v", string(obj.Raw), err)
+			return &apiextensionsv1.ConversionResponse{
+				Result: metav1.Status{Status: metav1.StatusFailure, Message: err.Error()}, // TODO: distinguish between client and server errors
+			}
 		}
-		if crd, ok := v.crdSchemas[cr.GroupVersionKind()]; ok {
-			convertedCR, err := v.convertDeclaratively(cr.Object, crd.Schema.OpenAPIV3Schema, convertRequest.DesiredAPIVersion)
-			if err != nil {
-				klog.Error(status.String())
-				return &v1beta1.ConversionResponse{
-					Result: metav1.Status{Status: metav1.StatusInternalServerError}, // TODO: distinguish between client and server errors
+
+		currentGVK := cr.GroupVersionKind()
+		targetGVK := schema.FromAPIVersionAndKind(convertRequest.Request.DesiredAPIVersion, currentGVK.Kind)
+		if targetCrd, ok := v.crdSchemas[targetGVK]; ok {
+			if currentCrd, ok := v.crdSchemas[currentGVK]; ok {
+				klog.Infof("converting from %v to %v (%s to %s)", currentGVK, targetGVK, currentCrd.Name, targetCrd.Name)
+				converted, err := v.convertObj(nil, currentCrd.Schema.OpenAPIV3Schema, targetCrd.Schema.OpenAPIV3Schema, cr.Object)
+				if err != nil {
+					return &apiextensionsv1.ConversionResponse{
+						Result: metav1.Status{Status: metav1.StatusFailure, Message: err.Error()}, // TODO: distinguish between client and server errors
+					}
 				}
+				out, ok := converted.(map[string]interface{})
+				if !ok {
+					return &apiextensionsv1.ConversionResponse{
+						Result: metav1.Status{Reason: metav1.StatusFailure, Message: fmt.Sprintf("Expected map in conversion response but got %T", converted)},
+					}
+				}
+				convertedCR := &unstructured.Unstructured{Object: out}
+				convertedCR.SetAPIVersion(convertRequest.Request.DesiredAPIVersion)
+				convertedCR.SetKind(cr.GetKind())
+
+				convertedCR.SetName(cr.GetName())
+				convertedCR.SetGenerateName(cr.GetGenerateName())
+				convertedCR.SetNamespace(cr.GetNamespace())
+				convertedCR.SetSelfLink(cr.GetSelfLink())
+				convertedCR.SetUID(cr.GetUID())
+				convertedCR.SetResourceVersion(cr.GetResourceVersion())
+				convertedCR.SetGeneration(cr.GetGeneration())
+				convertedCR.SetNamespace(cr.GetNamespace())
+				convertedCR.SetCreationTimestamp(cr.GetCreationTimestamp())
+				convertedCR.SetDeletionTimestamp(cr.GetDeletionTimestamp())
+				convertedCR.SetDeletionGracePeriodSeconds(cr.GetDeletionGracePeriodSeconds())
+				convertedCR.SetLabels(cr.GetLabels())
+				convertedCR.SetAnnotations(cr.GetAnnotations())
+				convertedCR.SetOwnerReferences(cr.GetOwnerReferences())
+				convertedCR.SetFinalizers(cr.GetFinalizers())
+				convertedCR.SetClusterName(cr.GetClusterName())
+				convertedCR.SetManagedFields(cr.GetManagedFields())
+
+				// TODO: handle all object meta
+				convertedObjects = append(convertedObjects, runtime.RawExtension{Object: convertedCR})
 			}
 		}
-		convertedCR.SetAPIVersion(convertRequest.DesiredAPIVersion)
-		out, ok := convertedCR.(map[string]interface{})
-		if !ok {
-			return &v1beta1.ConversionResponse{
-				Result: metav1.Status{Status: metav1.StatusInternalServerError}, // TODO: distinguish between client and server errors
-			}
-		}
-		convertedObjects = append(convertedObjects, runtime.RawExtension{Object: unstructured.Unstructured{Object: out}})
 	}
-	return &v1beta1.ConversionResponse{
+	return &apiextensionsv1.ConversionResponse{
 		ConvertedObjects: convertedObjects,
 		Result: metav1.Status{
 			Status: metav1.StatusSuccess,
@@ -103,51 +137,6 @@ func (v *formatValidators) convertRequest(convertRequest extensionsv1.Conversion
 	}
 }
 
-// TODO: will probably need to walk both the old and new schemas
-// to support mapping rules like: from(v1): new.newfieldname := old.oldfieldname
-func (v *formatValidators) convertDeclaratively(fieldpath []string, obj interface{}, schema *apiextensionsv1.JSONSchemaProps, toVersion string) (interface{}, error) {
-	if len(schema.Format) > 0 {
-		parts := strings.SplitN(schema.Format, ":", 2)
-		if len(parts) < 2 {
-			return fmt.Errorf("expected format of the form <id>:<content>, but got %s", schema.Format)
-		}
-		id := parts[0]
-		celSource := parts[1]
-		if id == "convert" {
-			prg, err := v.compileProgram(fieldpath, celSource, schema)
-			var root string
-			if len(fieldpath) > 0 {
-				root = fieldpath[len(fieldpath)-1]
-			} else {
-				root = "object"
-			}
-			celVars := map[string]interface{}{root: obj}
-			out, _, err := prog.Eval(celVars)
-			// TODO: still need to do automatic conversion of things not manually converted
-			if err != nil {
-				return fmt.Errorf("validation rule evaluation error: %w for: %#+v, rule: %s", err, obj, celSource)
-			}
-			return out.Value()
-		}
-	}
-	if len(schema.Properties) > 0 {
-		if in, ok := obj.(map[string]interface{}); ok {
-			mout := map[string]interface{}{}
-			// TODO: walk both schema here
-			// TODO: only automatically convert things to the new schema when type and fieldname match
-			for propName, prop := range schema.Properties {
-				if v, ok := in[propName]; ok {
-					if out, err := v.convertDeclaratively(append(fieldpath, propName), &prop); err != nil {
-						return err
-					}
-					mout[propName] = out
-				}
-			}
-			return mout
-		}
-	}
-	return obj
-}
 
 func (v *formatValidators) validateRequest(ar v1.AdmissionReview) *v1.AdmissionResponse {
 	if ar.Request.Kind.String() == apiextensionsv1.SchemeGroupVersion.WithKind("CustomResourceDefinition").String() {
@@ -261,4 +250,42 @@ func (v *formatValidators) validateObj(fieldpath []string, schema *apiextensions
 		}
 	}
 	return nil
+}
+
+func (v *formatValidators) convertObj(fieldpath []string, currentSchema, targetSchema *apiextensionsv1.JSONSchemaProps, obj interface{}) (interface{}, error) {
+	klog.Infof("Conversion requested for path %v, format: %s", fieldpath, targetSchema.Format)
+	if len(targetSchema.Format) > 0 {
+		parts := strings.SplitN(targetSchema.Format, ":", 2)
+		if len(parts) < 2 {
+			return nil, fmt.Errorf("expected format of the form <id>:<content>, but got %s", targetSchema.Format)
+		}
+		id := parts[0]
+		code := parts[1]
+		converter, ok := v.converters[id]
+		if ok {
+			return converter.Convert(fieldpath, code, currentSchema, targetSchema, obj)
+		}
+	}
+	if len(targetSchema.Properties) > 0 {
+		if in, ok := obj.(map[string]interface{}); ok {
+			mout := map[string]interface{}{}
+			// TODO: walk both schema here
+			// TODO: only automatically convert things to the new schema when type and fieldname match
+			for propName, prop := range targetSchema.Properties {
+				currentProp := currentSchema.Properties[propName]
+				if value, ok := in[propName]; ok {
+					out, err := v.convertObj(append(fieldpath, propName), &currentProp, &prop, value)
+					if err != nil {
+						return nil, err
+					}
+					mout[propName] = out
+				}
+			}
+			klog.Info("Converter: returning converted map")
+			return mout, nil
+		} else {
+			klog.Info("Converter: object was not map")
+		}
+	}
+	return obj, nil
 }

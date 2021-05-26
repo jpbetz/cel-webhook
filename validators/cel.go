@@ -2,6 +2,7 @@ package validators
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/google/cel-go/cel"
@@ -9,6 +10,7 @@ import (
 	celext "github.com/google/cel-go/ext"
 	expr "google.golang.org/genproto/googleapis/api/expr/v1alpha1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/klog"
 )
 
 type CelValidator struct {
@@ -23,9 +25,10 @@ func NewCelValidator() *CelValidator {
 
 func (v *CelValidator) compileProgram(fieldpath []string, celSource string, schema *apiextensionsv1.JSONSchemaProps) (cel.Program, error) {
 	programPath := "/" + strings.Join(fieldpath, "/")
-	if program, ok := v.compiledPrograms[programPath]; ok {
-		return program, nil
-	}
+	// TODO: reenable once program caching is scoped to crd and invalidation is in place for crd reloads
+	//if program, ok := v.compiledPrograms[programPath]; ok {
+	//	return program, nil
+	//}
 
 	var root string
 	if len(fieldpath) > 0 {
@@ -43,7 +46,12 @@ func (v *CelValidator) compileProgram(fieldpath []string, celSource string, sche
 	}
 	ast, issues := env.Compile(celSource)
 	if issues != nil && issues.Err() != nil {
-		return nil, fmt.Errorf("validation rule compile error: %w", issues.Err())
+		var decls string
+		for _, decl := range celDecls {
+			decls += fmt.Sprintf("(name: %s)", decl.Name)
+
+		}
+		return nil, fmt.Errorf("compile error for buildDecls %s: %w", decls, issues.Err())
 	}
 	ast, issues = env.Check(ast)
 	if issues != nil && issues.Err() != nil {
@@ -94,7 +102,9 @@ func (v *CelValidator) ValidateProgram(fieldpath []string, validatorContent stri
 
 func (v *CelValidator) Validate(fieldpath []string, celSource string, schema *apiextensionsv1.JSONSchemaProps, obj interface{}) error {
 	prg, err := v.compileProgram(fieldpath, celSource, schema)
-
+	if err != nil {
+		return fmt.Errorf("validation rule compile error: %w for: %#+v, rule: %s", err, obj, celSource)
+	}
 	var root string
 	if len(fieldpath) > 0 {
 		root = fieldpath[len(fieldpath)-1]
@@ -128,4 +138,42 @@ func (v *CelValidator) buildVars(fieldpath []string, obj interface{}, celVars ma
 		fieldName := strings.Join(fieldpath, ".")
 		celVars[fieldName] = obj
 	}
+}
+
+
+// TODO: will probably need to walk both the old and new schemas
+// to support mapping rules like: from(v1): new.newfieldname := old.oldfieldname
+func (v *CelValidator) Convert(fieldpath []string, celSource string, currentSchema, targetSchema *apiextensionsv1.JSONSchemaProps, obj interface{}) (interface{}, error) {
+	klog.Infof("Running converter: %s on %v", celSource, fieldpath)
+	prg, err := v.compileProgram(fieldpath, celSource, currentSchema) // Schema is expected to be the old schema (for now)
+	if err != nil {
+		return nil, fmt.Errorf("conversion rule compile error: %w for: %#+v, rule: %s", err, obj, celSource)
+	}
+	var root string
+	if len(fieldpath) > 0 {
+		root = fieldpath[len(fieldpath)-1]
+	} else {
+		root = "object"
+	}
+	celVars := map[string]interface{}{}
+	v.buildVars([]string{root}, obj, celVars)
+	out, _, err := prg.Eval(celVars)
+	if err != nil {
+		return nil, fmt.Errorf("conversion rule evaluation error: %w for: %#+v, celVars: %#+v, rule: %s", err, obj, celVars, celSource)
+	}
+	result, err := out.ConvertToNative(reflect.TypeOf(obj))
+	if err != nil {
+		return nil, err
+	}
+
+	// basic automatic conversion of things not manually converted
+	if m, ok := obj.(map[string]interface{}); ok {
+		resultm := result.(map[string]interface{})
+		for k, v := range m {
+			if _, ok = resultm[k]; !ok {
+				resultm[k] = v
+			}
+		}
+	}
+	return result, nil
 }
