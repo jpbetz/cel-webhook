@@ -135,7 +135,7 @@ func runCmdWebhook(cmd *cobra.Command, args []string) {
 	validator.registerFormat("wasm", wasmValidator)
 
 	celValidator := validators.NewCelValidator()
-	validator.registerFormat("rule", celValidator)
+	validator.registerFormat("validation", celValidator)
 	validator.registerConverter("conversion", celValidator)
 
 	config := Config{

@@ -18,7 +18,7 @@ spec:
           type: object
           properties:
             spec:
-              format: "rule: spec.minReplicas <= spec.replicas && spec.replicas <= spec.maxReplicas"
+              format: "rule: minReplicas <= replicas && replicas <= maxReplicas"
               type: object
               properties:
                 cronSpec:
@@ -45,7 +45,7 @@ spec:
           properties:
             spec:
               type: object
-              format: "conversion: {'image2': spec.image}"
+              format: "conversion:from=v1: {'image2': v1.image}"
               properties:
                 cronSpec:
                   #format: "wasm:example-module:validate_length"

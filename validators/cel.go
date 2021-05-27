@@ -105,14 +105,8 @@ func (v *CelValidator) Validate(fieldpath []string, celSource string, schema *ap
 	if err != nil {
 		return fmt.Errorf("validation rule compile error: %w for: %#+v, rule: %s", err, obj, celSource)
 	}
-	var root string
-	if len(fieldpath) > 0 {
-		root = fieldpath[len(fieldpath)-1]
-	}  else {
-		root = "object"
-	}
 	celVars := map[string]interface{}{}
-	v.buildVars([]string{root}, obj, celVars)
+	v.buildVars([]string{}, obj, celVars)
 	out, _, err := prg.Eval(celVars)
 	if err != nil {
 		return fmt.Errorf("validation rule evaluation error: %w for: %#+v, rule: %s", err, obj, celSource)
@@ -145,18 +139,12 @@ func (v *CelValidator) buildVars(fieldpath []string, obj interface{}, celVars ma
 // to support mapping rules like: from(v1): new.newfieldname := old.oldfieldname
 func (v *CelValidator) Convert(fieldpath []string, celSource string, currentVersion, targetVersion string, currentSchema, targetSchema *apiextensionsv1.JSONSchemaProps, obj interface{}) (interface{}, error) {
 	klog.Infof("Running converter: %s on %v", celSource, fieldpath)
-	prg, err := v.compileProgram(fieldpath, celSource, currentSchema) // Schema is expected to be the old schema (for now)
+	prg, err := v.compileProgram([]string{"v1"}, celSource, currentSchema) // Schema is expected to be the old schema (for now)
 	if err != nil {
 		return nil, fmt.Errorf("conversion rule compile error: %w for: %#+v, rule: %s", err, obj, celSource)
 	}
-	var root string
-	if len(fieldpath) > 0 {
-		root = fieldpath[len(fieldpath)-1]
-	} else {
-		root = "object"
-	}
 	celVars := map[string]interface{}{}
-	v.buildVars([]string{root}, obj, celVars)
+	v.buildVars([]string{"v1"}, obj, celVars)
 	out, _, err := prg.Eval(celVars)
 	if err != nil {
 		return nil, fmt.Errorf("conversion rule evaluation error: %w for: %#+v, celVars: %#+v, rule: %s", err, obj, celVars, celSource)

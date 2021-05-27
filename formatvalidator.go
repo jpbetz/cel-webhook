@@ -92,6 +92,7 @@ func (v *formatValidators) convertRequest(convertRequest apiextensionsv1.Convers
 				klog.Infof("converting from %v to %v (%s to %s)", currentGVK, targetGVK, currentCrd.Name, targetCrd.Name)
 				converted, err := v.convertObj(nil, currentGVK.Version, targetGVK.Version, currentCrd.Schema.OpenAPIV3Schema, targetCrd.Schema.OpenAPIV3Schema, cr.Object)
 				if err != nil {
+					klog.Infof("Conversion error for %v to %v: %v", currentGVK, targetGVK, err)
 					return &apiextensionsv1.ConversionResponse{
 						Result: metav1.Status{Status: metav1.StatusFailure, Message: err.Error()}, // TODO: distinguish between client and server errors
 					}
@@ -252,7 +253,6 @@ func (v *formatValidators) validateObj(fieldpath []string, schema *apiextensions
 }
 
 func (v *formatValidators) convertObj(fieldpath []string, currentVersion, targetVersion string, currentSchema, targetSchema *apiextensionsv1.JSONSchemaProps, obj interface{}) (interface{}, error) {
-	klog.Infof("Conversion requested for path %v, format: %s", fieldpath, targetSchema.Format)
 	if len(targetSchema.Format) > 0 {
 		parts := strings.SplitN(targetSchema.Format, ":", 3)
 		if len(parts) < 2 {
@@ -286,10 +286,7 @@ func (v *formatValidators) convertObj(fieldpath []string, currentVersion, target
 					mout[propName] = out
 				}
 			}
-			klog.Info("Converter: returning converted map")
 			return mout, nil
-		} else {
-			klog.Info("Converter: object was not map")
 		}
 	}
 	return obj, nil
