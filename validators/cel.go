@@ -30,13 +30,7 @@ func (v *CelValidator) compileProgram(fieldpath []string, celSource string, sche
 	//	return program, nil
 	//}
 
-	var root string
-	if len(fieldpath) > 0 {
-		root = fieldpath[len(fieldpath)-1]
-	}  else {
-		root = "object"
-	}
-	celDecls := v.buildDecl([]string{root}, schema)
+	celDecls := v.buildDecl([]string{}, schema)
 	env, err := cel.NewEnv(
 		celext.Strings(),
 		celext.Encoders(),
@@ -111,7 +105,7 @@ func (v *CelValidator) Validate(fieldpath []string, celSource string, schema *ap
 	if err != nil {
 		return fmt.Errorf("validation rule evaluation error: %w for: %#+v, rule: %s", err, obj, celSource)
 	}
-	if out.Value()  != true {
+	if out.Value() != true {
 		// TODO: Will need much better error reporting here
 		return fmt.Errorf("validation failed for: %s", celSource)
 	}
@@ -133,7 +127,6 @@ func (v *CelValidator) buildVars(fieldpath []string, obj interface{}, celVars ma
 		celVars[fieldName] = obj
 	}
 }
-
 
 // TODO: will probably need to walk both the old and new schemas
 // to support mapping rules like: from(v1): new.newfieldname := old.oldfieldname

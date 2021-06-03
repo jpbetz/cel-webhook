@@ -6,7 +6,7 @@ webhooks:
   - name: "webhook.validator.example.com"
     rules:
       - apiGroups:   ["*"]
-        apiVersions: ["v1"]
+        apiVersions: ["*"]
         operations:  ["CREATE", "UPDATE"]
         resources:   ["*"]
         scope:       "*"
@@ -16,3 +16,4 @@ webhooks:
     admissionReviewVersions: ["v1"]
     sideEffects: None
     timeoutSeconds: 5
+    failurePolicy: Fail

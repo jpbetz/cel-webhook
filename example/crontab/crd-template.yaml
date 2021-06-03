@@ -18,15 +18,12 @@ spec:
           type: object
           properties:
             spec:
-              format: "rule: minReplicas <= replicas && replicas <= maxReplicas"
+              format: "validation: minReplicas <= replicas && replicas <= maxReplicas"
               type: object
               properties:
                 cronSpec:
-                  #format: "wasm:example-module:validate_length"
-                  #format: "rule: size(cronSpec.split(' ')) >= 5 && cronSpec.split(' ').all(field, field == '*' || field.startsWith('*/') || )"
                   type: string
                 image:
-                  # https://github.com/distribution/distribution/blob/v2.7.1/reference/reference.go
                   type: string
                 replicas:
                   type: integer
@@ -48,12 +45,11 @@ spec:
               format: "conversion:from=v1: {'image2': v1.image}"
               properties:
                 cronSpec:
-                  #format: "wasm:example-module:validate_length"
                   type: string
                 image2:
                   type: string
                 replicas:
-                  format: "rule: replicas > 100 "
+                  format: "validation: replicas > 100"
                   type: integer
                 minReplicas:
                   type: integer
