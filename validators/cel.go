@@ -42,10 +42,10 @@ func (v *CelValidator) compileProgram(fieldpath []string, celSource string, sche
 	if issues != nil && issues.Err() != nil {
 		var decls string
 		for _, decl := range celDecls {
-			decls += fmt.Sprintf("(name: %s)", decl.Name)
+			decls += fmt.Sprintf("%s, ", decl.Name)
 
 		}
-		return nil, fmt.Errorf("compile error for buildDecls %s: %w", decls, issues.Err())
+		return nil, fmt.Errorf("compile error for validation expression '%s' (decls: %s): %w", celSource, decls, issues.Err())
 	}
 	ast, issues = env.Check(ast)
 	if issues != nil && issues.Err() != nil {

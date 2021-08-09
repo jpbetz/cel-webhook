@@ -49,7 +49,6 @@ spec:
                 image2:
                   type: string
                 replicas:
-                  format: "validation: replicas > 100"
                   type: integer
                 minReplicas:
                   type: integer

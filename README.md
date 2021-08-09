@@ -49,7 +49,7 @@ Usage
 
 ```sh
 # Set up some certs
-$ example/crontab/wasm/setup-webhook.sh
+$ example/crontab/setup-webhook.sh
 
 # Run a kubernetes cluster, e.g.:
 $ cd kubernetes
@@ -72,6 +72,9 @@ $ kubectl apply --server-side -f example/crontab/crd.yaml
 # Validate a CR
 $ kubectl apply --server-side -f example/crontab/invalid.yaml
 
+# Write a valid CR
+$ kubectl apply --server-side -f example/crontab/valid.yaml
+
 # Get the CR at v2 to force conversion (v2 is the default, so this isn't strictly needed, but it's good to know how to do it)
 $ kubectl get crontabs.v2.stable.example.com my-crontab -oyaml
 ```
@@ -81,7 +84,7 @@ Notes
 
 How to run just the webhook:
 
-example/crontab/wasm/setup-webhook.sh
+example/crontab/setup-webhook.sh
 
 go build . && ./omni-webhook webhook \
   --tls-cert-file example/crontab/webhook.crt \
@@ -123,7 +126,7 @@ Conversion cases:
 
 How to run just the webhook:
 
-example/crontab/wasm/setup-webhook.sh
+example/crontab/setup-webhook.sh
 
 go build . && ./omni-webhook webhook \
   --tls-cert-file example/crontab/webhook.crt \
