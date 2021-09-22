@@ -1,4 +1,4 @@
-Omni-webhook
+CEL-webhook
 ------------
 
 This webhook was written to explore using embedded/sandboxed languages for the validation, defaulting 
@@ -57,7 +57,7 @@ $ hack/local-up-cluster.sh
 
 # run this webhook
 $ export KUBECONFIG=/var/run/kubernetes/admin.kubeconfig
-$ go build . && ./omni-webhook webhook \
+$ go build . && ./cel-webhook webhook \
   --tls-cert-file example/crontab/webhook.crt \
   --tls-private-key-file example/crontab/webhook.key \
   --port 8084 \
@@ -86,7 +86,7 @@ How to run just the webhook:
 
 example/crontab/setup-webhook.sh
 
-go build . && ./omni-webhook webhook \
+go build . && ./cel-webhook webhook \
   --tls-cert-file example/crontab/webhook.crt \
   --tls-private-key-file example/crontab/webhook.key \
   --port 8084 \
@@ -128,7 +128,7 @@ How to run just the webhook:
 
 example/crontab/setup-webhook.sh
 
-go build . && ./omni-webhook webhook \
+go build . && ./cel-webhook webhook \
   --tls-cert-file example/crontab/webhook.crt \
   --tls-private-key-file example/crontab/webhook.key \
   --port 8084 \
@@ -162,14 +162,14 @@ Defaulting cases:
 $ cd kubernetes
 hack/local-up-cluster.sh
 
-$ cd omni-webhook
+$ cd cel-webhook
 export KUBECONFIG=/var/run/kubernetes/admin.kubeconfig
-go build . && ./omni-webhook webhook \
+go build . && ./cel-webhook webhook \
   --tls-cert-file example/crontab/webhook.crt \
   --tls-private-key-file example/crontab/webhook.key \
   --port 8084 \
   -v 4
   
-$ cd omni-webhook
+$ cd cel-webhook
 kubectl apply --server-side -f example/crontab/crd.yaml
 kubectl apply --server-side -f example/crontab/webhook.yaml

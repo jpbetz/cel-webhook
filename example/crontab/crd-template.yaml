@@ -18,6 +18,8 @@ spec:
           type: object
           properties:
             spec:
+              # x-kubernetes-validator:
+              #   - rule: "minReplicas <= replicas && replicas <= maxReplicas"
               format: "validation: minReplicas <= replicas && replicas <= maxReplicas"
               type: object
               properties:
@@ -42,7 +44,7 @@ spec:
           properties:
             spec:
               type: object
-              format: "conversion:from=v1: {'image2': v1.image}"
+              #format: "conversion:from=v1: {'image2': image}"
               properties:
                 cronSpec:
                   type: string
@@ -55,6 +57,14 @@ spec:
                 maxReplicas:
                   type: integer
   conversion:
+    #strategy: ConversionRules
+    #converters:
+    #  - fromVersion: v1
+    #    toVersion: v2
+    #    rules: # renames the image field from v1 to image2 in v2
+    #      field: spec.image2
+    #      rule: "spec.image" 
+ 
     strategy: Webhook
     webhook:
       conversionReviewVersions: ["v1","v2"]

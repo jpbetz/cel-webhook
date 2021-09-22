@@ -14,8 +14,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog"
 
-	"github.com/jpbetz/omni-webhook/informers"
-	"github.com/jpbetz/omni-webhook/validators"
+	"github.com/jpbetz/cel-webhook/informers"
+	"github.com/jpbetz/cel-webhook/validators"
 )
 
 var (
@@ -126,13 +126,6 @@ func runCmdWebhook(cmd *cobra.Command, args []string) {
 	if err != nil {
 		panic(err)
 	}
-
-	wasmValidator := validators.NewWasmValidator()
-	err = wasmValidator.RegisterModule("example/main.wasm")
-	if err != nil {
-		panic(err)
-	}
-	validator.registerFormat("wasm", wasmValidator)
 
 	celValidator := validators.NewCelValidator()
 	validator.registerFormat("validation", celValidator)
